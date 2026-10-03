@@ -1,0 +1,151 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            git \
+            curl \
+            wget \
+            python3 \
+            libsdl2-dev \
+            libvulkan-dev \
+            zlib1g-dev \
+            rapidjson-dev \
+            libfmt-dev \
+            libbotan-2-dev \
+            libcapstone-dev
+
+      - name: Install imgui
+        run: |
+          mkdir -p /tmp/imgui
+          git clone --depth=1 https://github.com/ocornut/imgui.git /tmp/imgui/src
+          cmake -S /tmp/imgui/src -B /tmp/imgui/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/tmp/imgui-install
+          cmake --build /tmp/imgui/build --target install
+
+      - name: Create missing externals/core.cmake stub
+        run: |
+          mkdir -p externals
+          cat > externals/core.cmake <<'EOF'
+          message(STATUS "Using CI stub for core.cmake")
+          add_library(orbital_core INTERFACE)
+          target_include_directories(orbital_core INTERFACE ${CMAKE_CURRENT_LIST_DIR})
+          EOF
+
+      - name: Configure
+        env:
+          CMAKE_PREFIX_PATH: /tmp/imgui-install
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="/tmp/imgui-install"
+
+      - name: Build
+        run: |
+          cmake --build build --parallel
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install cmake ninja sdl2 vulkan-headers zlib rapidjson fmt botan capstone
+
+      - name: Install imgui
+        run: |
+          mkdir -p /tmp/imgui
+          git clone --depth=1 https://github.com/ocornut/imgui.git /tmp/imgui/src
+          cmake -S /tmp/imgui/src -B /tmp/imgui/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/tmp/imgui-install
+          cmake --build /tmp/imgui/build --target install
+
+      - name: Create missing externals/core.cmake stub
+        run: |
+          mkdir -p externals
+          cat > externals/core.cmake <<'EOF'
+          message(STATUS "Using CI stub for core.cmake")
+          add_library(orbital_core INTERFACE)
+          target_include_directories(orbital_core INTERFACE ${CMAKE_CURRENT_LIST_DIR})
+          EOF
+
+      - name: Configure
+        env:
+          CMAKE_PREFIX_PATH: /tmp/imgui-install
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="/tmp/imgui-install"
+
+      - name: Build
+        run: |
+          cmake --build build --parallel
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install vcpkg dependencies
+        shell: powershell
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:/vcpkg
+          C:/vcpkg/bootstrap-vcpkg.bat
+          C:/vcpkg/vcpkg install sdl2 vulkan zlib rapidjson fmt botan capstone --triplet x64-windows
+
+      - name: Install imgui
+        shell: powershell
+        run: |
+          git clone --depth=1 https://github.com/ocornut/imgui.git C:/imgui
+          cmake -S C:/imgui -B C:/imgui/build -G "Visual Studio 17 2022" -DCMAKE_INSTALL_PREFIX=C:/imgui-install
+          cmake --build C:/imgui/build --config Release
+          cmake --install C:/imgui/build --config Release
+
+      - name: Create missing externals/core.cmake stub
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path externals | Out-Null
+          @'
+          message(STATUS "Using CI stub for core.cmake")
+          add_library(orbital_core INTERFACE)
+          target_include_directories(orbital_core INTERFACE ${CMAKE_CURRENT_LIST_DIR})
+          '@@ | Set-Content -Path externals/core.cmake
+
+      - name: Configure
+        shell: powershell
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="C:/imgui-install;C:/vcpkg/installed/x64-windows"
+
+      - name: Build
+        shell: powershell
+        run: |
+          cmake --build build --config Release --parallel
