@@ -10,6 +10,7 @@ jobs:
   linux:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,12 +35,17 @@ jobs:
             libbotan-2-dev \
             libcapstone-dev
 
-      - name: Install imgui (header-only)
+      - name: Install imgui (header-only package)
         run: |
-          mkdir -p /tmp/imgui-install/include
+          mkdir -p /tmp/imgui-install/include /tmp/imgui-install/lib/cmake/imgui
           git clone --depth=1 https://github.com/ocornut/imgui.git /tmp/imgui-src
           cp /tmp/imgui-src/*.h /tmp/imgui-install/include/
           cp /tmp/imgui-src/*.cpp /tmp/imgui-install/include/
+          cat > /tmp/imgui-install/lib/cmake/imgui/imguiConfig.cmake <<'EOF'
+          add_library(imgui INTERFACE)
+          target_include_directories(imgui INTERFACE ${CMAKE_CURRENT_LIST_DIR}/../../include)
+          add_library(imgui::imgui ALIAS imgui)
+          EOF
 
       - name: Create missing externals/core.cmake stub
         run: |
@@ -67,6 +73,7 @@ jobs:
   macos:
     runs-on: macos-latest
     timeout-minutes: 90
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,12 +83,17 @@ jobs:
           brew update
           brew install cmake ninja sdl2 vulkan-headers zlib rapidjson fmt botan capstone
 
-      - name: Install imgui (header-only)
+      - name: Install imgui (header-only package)
         run: |
-          mkdir -p /tmp/imgui-install/include
+          mkdir -p /tmp/imgui-install/include /tmp/imgui-install/lib/cmake/imgui
           git clone --depth=1 https://github.com/ocornut/imgui.git /tmp/imgui-src
           cp /tmp/imgui-src/*.h /tmp/imgui-install/include/
           cp /tmp/imgui-src/*.cpp /tmp/imgui-install/include/
+          cat > /tmp/imgui-install/lib/cmake/imgui/imguiConfig.cmake <<'EOF'
+          add_library(imgui INTERFACE)
+          target_include_directories(imgui INTERFACE ${CMAKE_CURRENT_LIST_DIR}/../../include)
+          add_library(imgui::imgui ALIAS imgui)
+          EOF
 
       - name: Create missing externals/core.cmake stub
         run: |
@@ -109,6 +121,7 @@ jobs:
   windows:
     runs-on: windows-latest
     timeout-minutes: 90
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -120,13 +133,20 @@ jobs:
           C:/vcpkg/bootstrap-vcpkg.bat
           C:/vcpkg/vcpkg install sdl2 vulkan zlib rapidjson fmt botan capstone --triplet x64-windows
 
-      - name: Install imgui (header-only)
+      - name: Install imgui (header-only package)
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path C:/imgui-install/include | Out-Null
+          New-Item -ItemType Directory -Force -Path C:/imgui-install/lib/cmake/imgui | Out-Null
           git clone --depth=1 https://github.com/ocornut/imgui.git C:/imgui-src
           Copy-Item C:/imgui-src/*.h C:/imgui-install/include/
           Copy-Item C:/imgui-src/*.cpp C:/imgui-install/include/
+          $config = @'
+          add_library(imgui INTERFACE)
+          target_include_directories(imgui INTERFACE ${CMAKE_CURRENT_LIST_DIR}/../../include)
+          add_library(imgui::imgui ALIAS imgui)
+          '@
+          Set-Content -Path C:/imgui-install/lib/cmake/imgui/imguiConfig.cmake -Value $config
 
       - name: Create missing externals/core.cmake stub
         shell: powershell
